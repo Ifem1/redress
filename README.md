@@ -90,7 +90,7 @@ Deploy `contract/redress.py` to GenLayer StudioNet via the GenLayer CLI or Studi
 
 ## Wallet & network
 
-The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The verified deployment for source commit `16892694addfba387671ec015585a62fda37b2a3` is `0xdD55914FBaC8c2E75151f794604155055681F150`; deployment transaction `0xfe6dbf209ce77c02befb27512912811e59f1ca6640ff045c329a4fa687f772ef` finalized with successful execution and majority agreement.
+The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The verified deployment for source commit `eef7ad647b31711e913d1aedfa4728cbd78fd39b` is `0x440269b089bfc93f808bAD4E129Dc7C380be716d`; deployment transaction `0x51277b7b70107e2f2c62fad122cbe71104da6279d072bf511f17b8a66a3fd013` finalized with successful execution and majority agreement. Live non-monetary review transaction `0x89d166db77e07261a544deb456fc69710df57691d4ded0a0b85dbffac499c6b2` reached ACCEPTED/MAJORITY_AGREE and stored a policy retrieval packet, frozen digest, and zero-compensation insufficient-evidence verdict.
 
 Wallet connection is explicit and session-scoped: first-time visitors see "Connect Wallet" and must click it; once connected, the session stays connected until the tab is closed or you click disconnect.
 
