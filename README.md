@@ -110,4 +110,6 @@ The accounting fields have precise meanings: `pool_total_funded` is cumulative G
 
 The application-level Redress challenge window is distinct from GenLayer's protocol-level transaction appeal/finality lifecycle. The former is enforced from the canonical transaction datetime supplied to the Intelligent Contract; the latter is handled by GenLayer transaction status/finality. The Direct Mode suite covers payable funding and the complete economic lifecycle; live payable funding requires an approved browser wallet/provider or signer path because the installed CLI write command submits payable calls with zero value.
 
+The final deployment also has a live payable funding proof using GenLayerJS `writeContract(..., value)`: transaction `0x814c94fb750edd229130cf23bce551aa5d13ab5c299993756db709f5843e43e5` sent `1 GEN` to `fund_venue_pool("VENUE-1")`. The canonical pool state afterward was `pool_total_funded=1 GEN`, `pool_balance=1 GEN`, `pool_reserved=0`, and `pool_paid=0`; the receipt finalized with majority agreement and successful validator execution.
+
 Not a court clone, not a moderation-ban-appeal tool, not a deterministic refund calculator, not a reputation/token system. It's a fairness layer: GenLayer validators decide the proportionate remedy, not just the winner.
