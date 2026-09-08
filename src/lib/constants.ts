@@ -52,6 +52,8 @@ export const CASE_STATUS_LABELS: Record<CaseStatus, string> = {
   closed: "Closed",
   dismissed: "Dismissed",
   escalated: "Escalated",
+  challenge_pending: "Challenge Pending",
+  finalized: "Finalized",
 };
 
 export const REMEDY_BAR_ORDER: RemedyType[] = [

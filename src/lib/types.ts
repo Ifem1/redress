@@ -21,7 +21,8 @@ export type Responsibility = "respondent" | "claimant" | "shared" | "unclear" | 
 export type CaseStatus =
   | "awaiting_response" | "response_submitted" | "evidence_locked"
   | "under_genlayer_review" | "verdict_issued" | "settlement_pending"
-  | "symbolic_completion_pending" | "closed" | "dismissed" | "escalated";
+  | "symbolic_completion_pending" | "closed" | "dismissed" | "escalated"
+  | "challenge_pending" | "finalized";
 
 export interface Venue {
   venue_id: string;
@@ -61,6 +62,10 @@ export interface ComplaintCase {
   verdict_at?: string;
   settled_at?: string;
   closed_at?: string;
+  challenge_status?: "open" | "submitted" | "completed" | "closed";
+  challenge_reason?: string;
+  challenge_deadline?: string;
+  finalized_at?: string;
   symbolic_completion_note?: string;
   symbolic_completion_proof_url?: string;
   symbolic_completed_at?: string;
@@ -86,7 +91,10 @@ export interface RedressVerdict {
   responsibility: Responsibility;
   confidence: number;
   short_reason: string;
+  evidence_packet?: Array<{ source_type: string; source_url: string; retrieval_status: string }>;
   decided_at: string;
+  original_decision?: RedressVerdict;
+  reviewed_decision?: RedressVerdict;
 }
 
 export interface WalletActivity {

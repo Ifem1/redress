@@ -2,6 +2,7 @@
 
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
+import { ExecutionResult, TransactionStatus } from "genlayer-js/types";
 import type {
   Venue, ComplaintCase, RespondentReply, RedressVerdict,
   WalletActivity, PoolStats, ContractSummary,
@@ -102,6 +103,18 @@ async function write(
     args,
     value,
   });
+  const receipt = await (client as any).waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.ACCEPTED,
+    fullTransaction: false,
+  });
+  const lifecycle = String(receipt?.status || "").toUpperCase();
+  const execution = String(receipt?.txExecutionResultName || receipt?.execution_result || "").toUpperCase();
+  const accepted = lifecycle === TransactionStatus.ACCEPTED || lifecycle === TransactionStatus.FINALIZED;
+  const finished = execution === ExecutionResult.FINISHED_WITH_RETURN;
+  if (!accepted || !finished) {
+    throw new Error(`GenLayer transaction did not execute successfully (status=${lifecycle}, execution=${execution})`);
+  }
   return { txHash: txHash as string, explorerLink: getExplorerTxLink(txHash as string) };
 }
 
@@ -177,6 +190,14 @@ export async function lockEvidence(caseId: string) {
 
 export async function requestRedressReview(caseId: string) {
   return write("request_redress_review", [caseId]);
+}
+
+export async function challengeCase(caseId: string, reason: string, newEvidenceUrlsJson: string) {
+  return write("challenge_case", [caseId, reason, newEvidenceUrlsJson]);
+}
+
+export async function finalizeCase(caseId: string) {
+  return write("finalize_case", [caseId]);
 }
 
 export async function settleCase(caseId: string) {

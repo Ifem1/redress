@@ -23,7 +23,7 @@ export function SettlementPanel({
   const [proofUrl, setProofUrl] = useState("");
   const [error, setError] = useState("");
 
-  const isMonetary = caseData.status === "settlement_pending" && verdict.approved_amount > 0;
+  const isMonetary = (caseData.status === "settlement_pending" || caseData.status === "finalized") && verdict.approved_amount > 0;
   const isSymbolic = caseData.status === "symbolic_completion_pending";
 
   async function handleSettle() {

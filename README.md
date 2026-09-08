@@ -100,4 +100,14 @@ Civic Remedy Interface — a calm, document-driven aesthetic (deep ink / paper w
 
 ## What Redress is not
 
+## Trust and settlement model
+
+Redress records a venue policy URL and freezes claimant/respondent source URLs before review. During GenLayer consensus, every validator independently retrieves the policy and public evidence with `gl.nondet.web.get`; retrieval status and bounded excerpts are included in the decision packet. Pages are untrusted data and are never treated as instructions. Invalid, unreachable, or entirely unusable sources produce an insufficient-evidence result.
+
+Venue funding is payable GEN, read from `gl.message.value`; caller-supplied numbers are not accepted as deposits. Each venue accounts for `pool_total_funded`, available `pool_balance`, `pool_reserved`, and `pool_paid`. A positive monetary decision moves funds into reservation, and settlement can only emit one external GEN transfer after the 24-hour challenge window and explicit finalization. A single challenge changes the case to `challenge_pending`; it cannot be repeated. The deployed address is intentionally configured through `NEXT_PUBLIC_CONTRACT_ADDRESS` and is not claimed here until a deployment has been independently verified.
+
+The accounting fields have precise meanings: `pool_total_funded` is cumulative GEN received by a venue; `pool_balance` is currently available GEN; `pool_reserved` is the liability reserved for finalized, unpaid claims; and `pool_paid` is cumulative GEN emitted into finalized payout messages. A payout moves `reserved` to `paid` and marks the case `payout_status=scheduled` in the same successful contract execution before emitting `emit_transfer(..., on="finalized")`. Because a finalized child transfer is not automatically refundable on child failure, Redress never returns scheduled value to `available` and never permits a second emission path. Recovery of a failed child transfer would require an explicit future protocol method and a separately verified reconciliation mechanism.
+
+The application-level Redress challenge window is distinct from GenLayer's protocol-level transaction appeal/finality lifecycle. The former is enforced from the canonical transaction datetime supplied to the Intelligent Contract; the latter is handled by GenLayer transaction status/finality.
+
 Not a court clone, not a moderation-ban-appeal tool, not a deterministic refund calculator, not a reputation/token system. It's a fairness layer: GenLayer validators decide the proportionate remedy, not just the winner.
