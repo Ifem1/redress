@@ -112,4 +112,6 @@ The application-level Redress challenge window is distinct from GenLayer's proto
 
 The final deployment also has a live payable funding proof using GenLayerJS `writeContract(..., value)`: transaction `0x814c94fb750edd229130cf23bce551aa5d13ab5c299993756db709f5843e43e5` sent `1 GEN` to `fund_venue_pool("VENUE-1")`. The canonical pool state afterward was `pool_total_funded=1 GEN`, `pool_balance=1 GEN`, `pool_reserved=0`, and `pool_paid=0`; the receipt finalized with majority agreement and successful validator execution.
 
+A second funded live case used `VENUE-2`: funding transaction `0x16bea04d2365e2d013c49af6bad949f6710308f993cb0bf5111891a37667ec83` finalized with `1 GEN` available, complaint transaction `0x8369ad6d56f6f3dfb23dc06057335c1c8db2779330e4e32e294e0986b17e6963`, and review transaction `0x15bad70907e2db1ecd26e27485ab427457b4650905f1fcefe1ba51fdcab3f174` reached accepted majority consensus. The real public evidence was insufficient, producing `dismissed_insufficient_evidence` with `approved_amount=0`; canonical accounting remained `pool_balance=1 GEN`, `pool_reserved=0`, `pool_paid=0`.
+
 Not a court clone, not a moderation-ban-appeal tool, not a deterministic refund calculator, not a reputation/token system. It's a fairness layer: GenLayer validators decide the proportionate remedy, not just the winner.
