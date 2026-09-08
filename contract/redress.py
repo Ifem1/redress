@@ -1092,6 +1092,13 @@ Return only this exact JSON object, no surrounding text:
         if case.get("status", "") != "finalized":
             raise gl.vm.UserError("Case must be finalized before symbolic completion")
 
+        venue = self._require_venue_exists(case.get("venue_id", ""))
+        verdict = self._load(self.challenge_verdicts.get(case_id, self.verdicts.get(case_id, "{}")))
+        if self._to_int(verdict.get("approved_amount", 0), 0) > 0 or self._is_monetary_remedy(verdict.get("remedy_type", "")):
+            raise gl.vm.UserError("Monetary cases must use settle_case, not symbolic completion")
+        if case.get("payout_status", "") in ("scheduled", "paid") or self._to_int(venue.get("pool_reserved", 0), 0) > 0:
+            raise gl.vm.UserError("Case has an unresolved monetary payout")
+
         sender = self._sender()
         now = _now()
 

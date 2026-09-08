@@ -187,3 +187,16 @@ def test_symbolic_completion_requires_finality(direct_vm, direct_deploy, direct_
     direct_vm.sender = direct_bob
     protocol.record_symbolic_completion(case, "Apology", "https://example.com/proof")
     assert json.loads(protocol.get_case(case))["status"] == "closed"
+
+
+def test_monetary_case_cannot_use_symbolic_completion_after_finality(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "claim_upheld_partial", "remedy_type": "partial_refund", "compensation_bps": 5000, "severity": "high", "responsibility": "respondent", "confidence": 90, "short_reason": "partial"})
+    protocol.request_redress_review(case)
+    verdict_at = datetime.fromisoformat(json.loads(protocol.get_case(case))["verdict_at"].replace("Z", "+00:00"))
+    direct_vm.warp((verdict_at + timedelta(hours=24, seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+    direct_vm.sender = direct_owner
+    protocol.finalize_case(case)
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Monetary cases must use settle_case, not symbolic completion"):
+        protocol.record_symbolic_completion(case, "Attempted bypass", "https://example.com/proof")
