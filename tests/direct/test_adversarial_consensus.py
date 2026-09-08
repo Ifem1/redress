@@ -60,3 +60,19 @@ def test_validator_reexecutes_substantive_path(direct_vm, direct_deploy, direct_
     _case_mocks(direct_vm, {"verdict": "dismissed_no_harm", "remedy_type": "no_remedy", "compensation_bps": 0, "responsibility": "claimant", "short_reason": "contradicted"})
     assert direct_vm.run_validator() is False
     assert direct_vm._captured_validators
+
+
+def test_validator_web_evidence_change_is_not_ignored(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    direct_vm.strict_mocks = True
+    _case_mocks(direct_vm, UPHELD)
+    protocol.request_redress_review(case)
+
+    # Keep the model response unchanged, but remove the claimant source from
+    # the validator's independent web environment. A structural-only validator
+    # would still accept the leader result; a substantive validator must fail.
+    direct_vm.clear_mocks()
+    direct_vm.strict_mocks = True
+    direct_vm.mock_llm("You are evaluating a Redress complaint", json.dumps(UPHELD))
+    direct_vm.mock_web("counter.example", {"status": 200, "body": "No contrary record."})
+    assert direct_vm.run_validator() is False

@@ -439,7 +439,9 @@ class RedressProtocol(gl.Contract):
         packet = []
         if frozen_policy:
             try:
-                packet.append({"source_type": "policy", **json.loads(frozen_policy)})
+                frozen = json.loads(frozen_policy)
+                frozen["content"] = frozen.get("excerpt", "")
+                packet.append({"source_type": "policy", **frozen})
             except Exception:
                 packet.append({"source_type": "policy", "retrieval_status": "missing", "content": ""})
         for source_type, url in urls:
@@ -761,30 +763,40 @@ class RedressProtocol(gl.Contract):
             "accepts_symbolic_claims": venue.get("accepts_symbolic_claims", False),
         })
 
-        evidence_packet = self._evidence_packet(case, venue, reply)
-        if challenge is not None:
-            try:
-                challenge_urls = json.loads(challenge.get("new_evidence_urls_json", "[]"))
-            except Exception:
-                challenge_urls = []
-            for url in challenge_urls[:8] if isinstance(challenge_urls, list) else []:
-                if self._valid_public_url(str(url)):
-                    try:
-                        response = gl.nondet.web.get(str(url))
-                        raw_body = getattr(response, "body", "")
-                        body = raw_body.decode("utf-8") if isinstance(raw_body, bytes) else str(raw_body)
-                        status = getattr(response, "status_code", getattr(response, "status", 0))
-                        evidence_packet.append({"source_type": "challenge", "source_url": str(url), "retrieval_status": "ok" if status == 200 else "http_error", "content": body[:12000]})
-                    except Exception:
-                        evidence_packet.append({"source_type": "challenge", "source_url": str(url), "retrieval_status": "unreachable"})
-        usable = [item for item in evidence_packet if item.get("retrieval_status") == "ok"]
-        if not usable:
-            inconclusive = self._inconclusive_verdict()
-            inconclusive["evidence_packet"] = evidence_packet
-            return inconclusive
-        evidence_context = self._json([{"source_type": item.get("source_type"), "source_url": item.get("source_url"), "retrieval_status": item.get("retrieval_status"), "excerpt": item.get("content", "")[:2500]} for item in evidence_packet])
-
         def evaluate_once() -> str:
+            # All web access is inside the nondeterministic leader/validator
+            # callback. Validators therefore perform their own independent fetch.
+            evidence_packet = self._evidence_packet(case, venue, reply)
+            if challenge is not None:
+                try:
+                    challenge_urls = json.loads(challenge.get("new_evidence_urls_json", "[]"))
+                except Exception:
+                    challenge_urls = []
+                for url in challenge_urls[:8] if isinstance(challenge_urls, list) else []:
+                    if self._valid_public_url(str(url)):
+                        try:
+                            response = gl.nondet.web.get(str(url))
+                            raw_body = getattr(response, "body", "")
+                            body = raw_body.decode("utf-8") if isinstance(raw_body, bytes) else str(raw_body)
+                            status = getattr(response, "status_code", getattr(response, "status", 0))
+                            evidence_packet.append({"source_type": "challenge", "source_url": str(url), "retrieval_status": "ok" if status == 200 else "http_error", "content": body[:12000]})
+                        except Exception:
+                            evidence_packet.append({"source_type": "challenge", "source_url": str(url), "retrieval_status": "unreachable"})
+            usable = [item for item in evidence_packet if item.get("retrieval_status") == "ok"]
+            if not usable:
+                inconclusive = self._inconclusive_verdict()
+                inconclusive["evidence_packet"] = evidence_packet
+                return json.dumps(inconclusive, sort_keys=True)
+            evidence_context = self._json([{"source_type": item.get("source_type"), "source_url": item.get("source_url"), "retrieval_status": item.get("retrieval_status"), "excerpt": item.get("content", "")[:2500]} for item in evidence_packet])
+            # Policy is separately frozen and may change representation from a
+            # live fetch to its stored excerpt. Consensus fingerprints the
+            # claimant/respondent/challenge evidence that validators must
+            # independently refetch and assess.
+            decision_evidence = self._json([
+                item for item in evidence_packet
+                if item.get("source_type") != "policy"
+            ])
+            evidence_signature = hashlib.sha256(decision_evidence.encode("utf-8")).hexdigest()
             prompt = f"""
 You are evaluating a Redress complaint on a decentralized complaint and
 compensation protocol.
@@ -839,6 +851,8 @@ Return only this exact JSON object, no surrounding text:
                 v = self._normalise_verdict_payload(data)
             except Exception:
                 v = self._inconclusive_verdict()
+            v["evidence_packet"] = evidence_packet
+            v["evidence_signature"] = evidence_signature
             return json.dumps(v, sort_keys=True)
 
         def validate_independently(leader_result: typing.Any) -> bool:
@@ -852,14 +866,16 @@ Return only this exact JSON object, no surrounding text:
                 leader.get("verdict") == independent.get("verdict")
                 and leader.get("remedy_type") == independent.get("remedy_type")
                 and leader.get("responsibility") == independent.get("responsibility")
+                and leader.get("evidence_signature") == independent.get("evidence_signature")
                 and abs(self._to_int(leader.get("compensation_bps"), 0) - self._to_int(independent.get("compensation_bps"), 0)) <= 1000
             )
 
         consensus_json = gl.vm.run_nondet(evaluate_once, validate_independently)
 
         try:
-            result = self._normalise_verdict_payload(consensus_json)
-            result["evidence_packet"] = evidence_packet
+            raw_result = json.loads(consensus_json) if isinstance(consensus_json, str) else consensus_json
+            result = self._normalise_verdict_payload(raw_result)
+            result["evidence_packet"] = raw_result.get("evidence_packet", [])
             return result
         except Exception:
             return self._inconclusive_verdict()
