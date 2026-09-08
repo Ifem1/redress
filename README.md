@@ -90,7 +90,7 @@ Deploy `contract/redress.py` to GenLayer StudioNet via the GenLayer CLI or Studi
 
 ## Wallet & network
 
-The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The verified deployment for source commit `eef7ad647b31711e913d1aedfa4728cbd78fd39b` is `0x440269b089bfc93f808bAD4E129Dc7C380be716d`; deployment transaction `0x51277b7b70107e2f2c62fad122cbe71104da6279d072bf511f17b8a66a3fd013` finalized with successful execution and majority agreement. Live non-monetary review transaction `0x89d166db77e07261a544deb456fc69710df57691d4ded0a0b85dbffac499c6b2` reached ACCEPTED/MAJORITY_AGREE and stored a policy retrieval packet, frozen digest, and zero-compensation insufficient-evidence verdict.
+The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The verified deployment for source commit `76d54f9fa1ddbfb55ffe64e9edbd8e177d90ecf6` is `0x89C942494D5543d9c5aB5903cABb9fF35a413191`; deployment transaction `0xa791ebf0ae013135b1136b51b920d5c27e123fa427c2b43319509a8a64bf16e2` finalized with successful execution and majority agreement.
 
 Wallet connection is explicit and session-scoped: first-time visitors see "Connect Wallet" and must click it; once connected, the session stays connected until the tab is closed or you click disconnect.
 
