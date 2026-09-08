@@ -79,6 +79,15 @@ export async function connectWallet(): Promise<string> {
 
 const readClient = createClient({ chain: studionet });
 
+// genlayer-js 1.1.8 does not export the newer isSuccessful helper yet.
+// Keep the SDK success predicate centralized until that helper is available.
+function isSuccessful(transaction: any): boolean {
+  const status = String(transaction?.statusName || transaction?.status || "").toUpperCase();
+  const execution = String(transaction?.txExecutionResultName || transaction?.execution_result || "").toUpperCase();
+  return (status === TransactionStatus.ACCEPTED || status === TransactionStatus.FINALIZED) &&
+    execution === ExecutionResult.FINISHED_WITH_RETURN;
+}
+
 async function getWriteClient() {
   const eth = getEth();
   const accounts: string[] = await eth.request({ method: "eth_requestAccounts" });
@@ -108,12 +117,8 @@ async function write(
     status: TransactionStatus.ACCEPTED,
     fullTransaction: false,
   });
-  const lifecycle = String(receipt?.status || "").toUpperCase();
-  const execution = String(receipt?.txExecutionResultName || receipt?.execution_result || "").toUpperCase();
-  const accepted = lifecycle === TransactionStatus.ACCEPTED || lifecycle === TransactionStatus.FINALIZED;
-  const finished = execution === ExecutionResult.FINISHED_WITH_RETURN;
-  if (!accepted || !finished) {
-    throw new Error(`GenLayer transaction did not execute successfully (status=${lifecycle}, execution=${execution})`);
+  if (!isSuccessful(receipt)) {
+    throw new Error(`GenLayer transaction did not execute successfully (status=${String(receipt?.statusName || receipt?.status)}, execution=${String(receipt?.txExecutionResultName || receipt?.execution_result)})`);
   }
   return { txHash: txHash as string, explorerLink: getExplorerTxLink(txHash as string) };
 }

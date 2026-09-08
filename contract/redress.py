@@ -4,6 +4,7 @@
 from genlayer import *
 
 import json
+import hashlib
 import typing
 from datetime import datetime, timezone
 
@@ -364,6 +365,40 @@ class RedressProtocol(gl.Contract):
             "short_reason": "Consensus could not be reached; please resubmit with more evidence.",
         }
 
+    def _normalise_economic_decision(self, verdict: typing.Any, claimed: int, cap: int) -> typing.Any:
+        monetary = verdict.get("verdict") in ("claim_upheld_full", "claim_upheld_partial")
+        remedy = verdict.get("remedy_type", "no_remedy")
+        if not monetary or not self._is_monetary_remedy(remedy):
+            verdict["approved_amount"] = 0
+            verdict["compensation_bps"] = 0
+            return verdict
+        claimed = max(0, int(claimed))
+        cap = int(cap) if int(cap) > 0 else claimed
+        if verdict.get("verdict") == "claim_upheld_full":
+            verdict["compensation_bps"] = 10000
+            amount = claimed
+        else:
+            verdict["compensation_bps"] = max(0, min(10000, self._to_int(verdict.get("compensation_bps"), 0)))
+            amount = (claimed * verdict["compensation_bps"]) // 10000
+        verdict["approved_amount"] = min(amount, claimed, cap)
+        return verdict
+
+    def _freeze_policy_snapshot(self, venue: typing.Any, packet: typing.Any) -> None:
+        if venue.get("policy_snapshot_hash", ""):
+            return
+        policy = next((item for item in packet if item.get("source_type") == "policy"), None)
+        policy = policy or {"retrieval_status": "missing", "content": ""}
+        content = str(policy.get("content", ""))[:12000]
+        snapshot = {
+            "policy_url": venue.get("policy_url", ""),
+            "retrieval_status": policy.get("retrieval_status", "missing"),
+            "content_digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "retrieved_at": _now(),
+            "excerpt": content[:2500],
+        }
+        venue["policy_snapshot_hash"] = snapshot["content_digest"]
+        venue["policy_snapshot"] = self._json(snapshot)
+
     def _status_from_verdict(self, verdict: str) -> str:
         mapping = {
             "claim_upheld_full": "settlement_pending",
@@ -392,7 +427,8 @@ class RedressProtocol(gl.Contract):
 
     def _evidence_packet(self, case: typing.Any, venue: typing.Any, reply: typing.Any) -> typing.Any:
         """Fetch frozen public sources inside consensus; URLs are never evidence by themselves."""
-        urls = [("policy", venue.get("policy_url", ""))]
+        frozen_policy = venue.get("policy_snapshot", "")
+        urls = [] if frozen_policy else [("policy", venue.get("policy_url", ""))]
         for key, raw in (("claimant", case.get("evidence_urls_json", "")), ("respondent", reply.get("counter_evidence_urls_json", ""))):
             try:
                 values = json.loads(raw) if raw else []
@@ -401,6 +437,11 @@ class RedressProtocol(gl.Contract):
             if isinstance(values, list):
                 urls.extend((key, str(v)) for v in values[:8])
         packet = []
+        if frozen_policy:
+            try:
+                packet.append({"source_type": "policy", **json.loads(frozen_policy)})
+            except Exception:
+                packet.append({"source_type": "policy", "retrieval_status": "missing", "content": ""})
         for source_type, url in urls:
             if not self._valid_public_url(url):
                 packet.append({"source_type": source_type, "source_url": str(url)[:600], "retrieval_status": "invalid_url"})
@@ -843,19 +884,13 @@ Return only this exact JSON object, no surrounding text:
 
         verdict = self._run_consensus_verdict(case, venue, reply)
 
-        # Compute approved amount for monetary remedies
-        claimed = self._to_int(case.get("claimed_amount", 0), 0)
-        approved_amount = 0
-        if verdict["remedy_type"] == "full_refund":
-            approved_amount = claimed
-        elif verdict["remedy_type"] in ("partial_refund", "fixed_compensation", "service_credit"):
-            approved_amount = (claimed * verdict["compensation_bps"]) // 10000
+        self._freeze_policy_snapshot(venue, verdict.get("evidence_packet", []))
+        self.venues[case.get("venue_id", "")] = self._json(venue)
 
+        claimed = self._to_int(case.get("claimed_amount", 0), 0)
         max_compensation = self._to_int(venue.get("max_compensation", 0), 0)
-        if claimed < 0 or approved_amount > claimed:
-            approved_amount = 0
-        if max_compensation > 0 and approved_amount > max_compensation:
-            approved_amount = max_compensation
+        verdict = self._normalise_economic_decision(verdict, claimed, max_compensation)
+        approved_amount = self._to_int(verdict.get("approved_amount", 0), 0)
 
         available = self._to_int(venue.get("pool_balance", 0), 0)
         if approved_amount > available:
@@ -876,7 +911,8 @@ Return only this exact JSON object, no surrounding text:
             "compensation_bps": verdict["compensation_bps"],
             "approved_amount": approved_amount,
             "evidence_packet": verdict.get("evidence_packet", []),
-            "policy_snapshot": venue.get("policy_version", venue.get("policy_url", "")),
+            "policy_snapshot": venue.get("policy_snapshot", venue.get("policy_version", venue.get("policy_url", ""))),
+            "policy_snapshot_hash": venue.get("policy_snapshot_hash", ""),
             "severity": verdict["severity"],
             "responsibility": verdict["responsibility"],
             "confidence": verdict["confidence"],
@@ -955,11 +991,12 @@ Return only this exact JSON object, no surrounding text:
             "new_evidence_urls_json": new_evidence_urls_json,
             "original_decision": original,
         })
-        challenged["approved_amount"] = min(
+        challenged = self._normalise_economic_decision(
+            challenged,
             self._to_int(case.get("claimed_amount", 0), 0),
             self._to_int(venue.get("max_compensation", 0), self._to_int(case.get("claimed_amount", 0), 0)),
-            (self._to_int(case.get("claimed_amount", 0), 0) * self._to_int(challenged.get("compensation_bps", 0), 0)) // 10000,
-        ) if challenged.get("remedy_type") in ("full_refund", "partial_refund", "fixed_compensation", "service_credit") else 0
+        )
+        challenged["policy_snapshot_hash"] = venue.get("policy_snapshot_hash", "")
         challenged["original_decision"] = original
         challenged["reviewed_decision"] = dict(challenged)
         self.challenge_verdicts[case_id] = self._json(challenged)
@@ -1052,8 +1089,8 @@ Return only this exact JSON object, no surrounding text:
         case = self._require_case_exists(case_id)
         self._require_case_respondent(case)
 
-        if case.get("status", "") != "symbolic_completion_pending":
-            raise gl.vm.UserError("Case is not pending symbolic completion")
+        if case.get("status", "") != "finalized":
+            raise gl.vm.UserError("Case must be finalized before symbolic completion")
 
         sender = self._sender()
         now = _now()
@@ -1081,6 +1118,16 @@ Return only this exact JSON object, no surrounding text:
 
         if case.get("status", "") in ("closed", "dismissed"):
             raise gl.vm.UserError("Case is already closed")
+
+        venue = self._require_venue_exists(case.get("venue_id", ""))
+        current_verdict = self._load(self.challenge_verdicts.get(case_id, self.verdicts.get(case_id, "{}")))
+        if (
+            self._to_int(venue.get("pool_reserved", 0), 0) > 0
+            or self._to_int(current_verdict.get("approved_amount", 0), 0) > 0
+            or case.get("payout_status", "") in ("scheduled", "paid")
+            or case.get("status", "") in ("settlement_pending", "symbolic_completion_pending", "finalized", "challenge_pending")
+        ):
+            raise gl.vm.UserError("Cannot manually close unresolved monetary or challengeable case")
 
         old_status = case.get("status", "")
         case["status"] = "closed"

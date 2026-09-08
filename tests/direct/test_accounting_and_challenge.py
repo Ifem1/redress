@@ -135,3 +135,55 @@ def test_rejection_to_approval_reserves_only_backed_amount(direct_vm, direct_dep
     assert stats["pool_balance"] == 12
     assert stats["pool_reserved"] == 8
     assert_pool_invariant(stats)
+
+
+def test_inconsistent_dismissal_with_refund_is_zeroed(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "dismissed_no_harm", "remedy_type": "full_refund", "compensation_bps": 10000, "severity": "low", "responsibility": "claimant", "confidence": 90, "short_reason": "no harm"})
+    result = json.loads(protocol.request_redress_review(case))
+    assert result["approved_amount"] == 0
+    assert json.loads(protocol.get_pool_stats(venue))["pool_reserved"] == 0
+
+
+def test_more_information_with_compensation_is_zeroed(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "needs_more_information", "remedy_type": "fixed_compensation", "compensation_bps": 10000, "severity": "medium", "responsibility": "unclear", "confidence": 20, "short_reason": "unclear"})
+    result = json.loads(protocol.request_redress_review(case))
+    assert result["approved_amount"] == 0
+    assert json.loads(protocol.get_pool_stats(venue))["pool_reserved"] == 0
+
+
+def test_manual_close_cannot_strand_reserved_funds(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "claim_upheld_full", "remedy_type": "full_refund", "compensation_bps": 10000, "severity": "high", "responsibility": "respondent", "confidence": 90, "short_reason": "supported"})
+    protocol.request_redress_review(case)
+    with direct_vm.expect_revert("Cannot manually close unresolved monetary or challengeable case"):
+        protocol.close_case(case)
+    assert json.loads(protocol.get_pool_stats(venue))["pool_reserved"] == 10
+
+
+def test_finalized_monetary_case_cannot_bypass_payout_with_close(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "claim_upheld_full", "remedy_type": "full_refund", "compensation_bps": 10000, "severity": "high", "responsibility": "respondent", "confidence": 90, "short_reason": "supported"})
+    protocol.request_redress_review(case)
+    verdict_at = datetime.fromisoformat(json.loads(protocol.get_case(case))["verdict_at"].replace("Z", "+00:00"))
+    direct_vm.warp((verdict_at + timedelta(hours=24, seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+    protocol.finalize_case(case)
+    with direct_vm.expect_revert("Cannot manually close unresolved monetary or challengeable case"):
+        protocol.close_case(case)
+
+
+def test_symbolic_completion_requires_finality(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "symbolic_redress_only", "remedy_type": "apology_public", "compensation_bps": 10000, "severity": "medium", "responsibility": "respondent", "confidence": 90, "short_reason": "apology"})
+    protocol.request_redress_review(case)
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Case must be finalized before symbolic completion"):
+        protocol.record_symbolic_completion(case, "Apology", "https://example.com/proof")
+    verdict_at = datetime.fromisoformat(json.loads(protocol.get_case(case))["verdict_at"].replace("Z", "+00:00"))
+    direct_vm.warp((verdict_at + timedelta(hours=24, seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+    direct_vm.sender = direct_owner
+    protocol.finalize_case(case)
+    direct_vm.sender = direct_bob
+    protocol.record_symbolic_completion(case, "Apology", "https://example.com/proof")
+    assert json.loads(protocol.get_case(case))["status"] == "closed"
