@@ -388,16 +388,31 @@ class RedressProtocol(gl.Contract):
             return
         policy = next((item for item in packet if item.get("source_type") == "policy"), None)
         policy = policy or {"retrieval_status": "missing", "content": ""}
-        content = str(policy.get("content", ""))[:12000]
+        content = str(policy.get("content", policy.get("excerpt", "")))[:2500]
+        digest = str(policy.get("content_digest", "")) or hashlib.sha256(content.encode("utf-8")).hexdigest()
         snapshot = {
             "policy_url": venue.get("policy_url", ""),
             "retrieval_status": policy.get("retrieval_status", "missing"),
-            "content_digest": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+            "content_digest": digest,
             "retrieved_at": _now(),
             "excerpt": content[:2500],
         }
         venue["policy_snapshot_hash"] = snapshot["content_digest"]
         venue["policy_snapshot"] = self._json(snapshot)
+
+    def _compact_evidence_manifest(self, packet: typing.Any) -> typing.Any:
+        manifest = []
+        for item in packet:
+            content = str(item.get("content", ""))
+            manifest.append({
+                "source_type": item.get("source_type", ""),
+                "source_url": str(item.get("source_url", ""))[:600],
+                "retrieval_status": item.get("retrieval_status", ""),
+                "content_digest": hashlib.sha256(content.encode("utf-8")).hexdigest() if content else "",
+                "content_length": len(content),
+                "excerpt": content[:512],
+            })
+        return manifest
 
     def _status_from_verdict(self, verdict: str) -> str:
         mapping = {
@@ -785,18 +800,9 @@ class RedressProtocol(gl.Contract):
             usable = [item for item in evidence_packet if item.get("retrieval_status") == "ok"]
             if not usable:
                 inconclusive = self._inconclusive_verdict()
-                inconclusive["evidence_packet"] = evidence_packet
+                inconclusive["evidence_packet"] = self._compact_evidence_manifest(evidence_packet)
                 return json.dumps(inconclusive, sort_keys=True)
             evidence_context = self._json([{"source_type": item.get("source_type"), "source_url": item.get("source_url"), "retrieval_status": item.get("retrieval_status"), "excerpt": item.get("content", "")[:2500]} for item in evidence_packet])
-            # Policy is separately frozen and may change representation from a
-            # live fetch to its stored excerpt. Consensus fingerprints the
-            # claimant/respondent/challenge evidence that validators must
-            # independently refetch and assess.
-            decision_evidence = self._json([
-                item for item in evidence_packet
-                if item.get("source_type") != "policy"
-            ])
-            evidence_signature = hashlib.sha256(decision_evidence.encode("utf-8")).hexdigest()
             prompt = f"""
 You are evaluating a Redress complaint on a decentralized complaint and
 compensation protocol.
@@ -851,8 +857,17 @@ Return only this exact JSON object, no surrounding text:
                 v = self._normalise_verdict_payload(data)
             except Exception:
                 v = self._inconclusive_verdict()
-            v["evidence_packet"] = evidence_packet
-            v["evidence_signature"] = evidence_signature
+            v["evidence_packet"] = self._compact_evidence_manifest(evidence_packet)
+            v["evidence_manifest"] = [
+                {
+                    "source_type": item.get("source_type", ""),
+                    "source_url": item.get("source_url", ""),
+                    "retrieval_status": item.get("retrieval_status", ""),
+                    "content_length": item.get("content_length", 0),
+                }
+                for item in v["evidence_packet"]
+                if item.get("source_type") != "policy"
+            ]
             return json.dumps(v, sort_keys=True)
 
         def validate_independently(leader_result: typing.Any) -> bool:
@@ -866,7 +881,7 @@ Return only this exact JSON object, no surrounding text:
                 leader.get("verdict") == independent.get("verdict")
                 and leader.get("remedy_type") == independent.get("remedy_type")
                 and leader.get("responsibility") == independent.get("responsibility")
-                and leader.get("evidence_signature") == independent.get("evidence_signature")
+                and leader.get("evidence_manifest") == independent.get("evidence_manifest")
                 and abs(self._to_int(leader.get("compensation_bps"), 0) - self._to_int(independent.get("compensation_bps"), 0)) <= 1000
             )
 
