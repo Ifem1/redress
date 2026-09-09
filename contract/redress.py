@@ -692,6 +692,13 @@ class RedressProtocol(gl.Contract):
             raise gl.vm.UserError("Case is not awaiting a response")
         if case.get("evidence_locked", False):
             raise gl.vm.UserError("Evidence already locked")
+        try:
+            if _canonical_datetime() >= datetime.fromisoformat(case.get("response_deadline", "").replace("Z", "+00:00")):
+                raise gl.vm.UserError("Response deadline has expired")
+        except gl.vm.UserError:
+            raise
+        except Exception:
+            raise gl.vm.UserError("Response deadline is invalid")
 
         sender = self._sender()
         now = _now()
@@ -969,7 +976,7 @@ Return only this exact JSON object, no surrounding text:
         case["latest_verdict_id"] = verdict_id
         case["verdict_at"] = now
         case["challenge_status"] = "open"
-        case["challenge_deadline"] = "open_until_finality"
+        case["challenge_deadline"] = (datetime.fromisoformat(now.replace("Z", "+00:00")) + timedelta(seconds=self.CHALLENGE_WINDOW_SECONDS)).isoformat().replace("+00:00", "Z")
         self.cases[case_id] = self._json(case)
         self._update_status_index(old_status, new_status, case_id)
 
@@ -1226,6 +1233,11 @@ Return only this exact JSON object, no surrounding text:
 
     @gl.public.view
     def get_case_verdict(self, case_id: str) -> str:
+        challenged = self.challenge_verdicts.get(case_id, "")
+        if challenged != "":
+            reviewed = self._load(challenged).get("reviewed_decision", {})
+            if reviewed:
+                return self._json(reviewed)
         return self.verdicts.get(case_id, "{}")
 
     @gl.public.view

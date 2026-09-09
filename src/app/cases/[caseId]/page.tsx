@@ -35,6 +35,7 @@ export default function CaseDetailPage() {
   const [challengeReason, setChallengeReason] = useState("");
   const [challengeUrls, setChallengeUrls] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [nowMs, setNowMs] = useState(0);
   const statusRef = useRef<string | undefined>(undefined);
 
   async function refresh(showSpinner: boolean) {
@@ -58,10 +59,12 @@ export default function CaseDetailPage() {
   }
 
   useEffect(() => {
+    setNowMs(Date.now());
     refresh(true);
     getConnectedAddress().then(setAddress);
 
     const interval = setInterval(() => {
+      setNowMs(Date.now());
       if (statusRef.current && LIVE_STATUSES.includes(statusRef.current as CaseStatus)) {
         refresh(false);
       }
@@ -103,7 +106,8 @@ export default function CaseDetailPage() {
 
   const isClaimant = address?.toLowerCase() === caseData.claimant.toLowerCase();
   const isRespondent = address?.toLowerCase() === caseData.respondent.toLowerCase();
-  const canLock = (isClaimant || isRespondent) && !caseData.evidence_locked && caseData.status !== "closed" && caseData.status !== "dismissed";
+  const responseExpired = nowMs > 0 && !!caseData.response_deadline && Date.parse(caseData.response_deadline) <= nowMs;
+  const canLock = (isClaimant || isRespondent) && !caseData.evidence_locked && caseData.status !== "closed" && caseData.status !== "dismissed" && (caseData.status === "response_submitted" || responseExpired);
   const canRequestReview = caseData.status === "evidence_locked";
   const reviewing = caseData.status === "under_genlayer_review";
 
@@ -139,6 +143,7 @@ export default function CaseDetailPage() {
             <p>Respondent: <AddressPill address={caseData.respondent} you={isRespondent} /></p>
           </div>
           <p className="text-xs text-[var(--soft-grey)]">{HARM_CATEGORY_LABELS[caseData.harm_category]} · {caseData.incident_date_text}</p>
+          <p className="text-xs mono">Response deadline: {new Date(caseData.response_deadline).toLocaleString()} · {responseExpired ? "expired" : "open"}</p>
           <p className="text-sm whitespace-pre-wrap">{caseData.complaint_text}</p>
           <div className="pt-2 border-t border-[var(--line-ash)]/40 text-xs">
             <p className="text-[var(--soft-grey)]">Requested remedy</p>
@@ -210,7 +215,7 @@ export default function CaseDetailPage() {
               <button onClick={handleChallenge} disabled={actionLoading || challengeReason.trim().length < 20 || !challengeUrls.trim()} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--redress-amber)", color: "var(--deep-ink)" }}>{actionLoading ? "Submitting…" : "Submit Challenge"}</button>
             </div>
           )}
-          {verdict && caseData.challenge_status === "completed" && caseData.status !== "finalized" && (
+          {verdict && caseData.status !== "finalized" && caseData.status !== "closed" && caseData.challenge_status !== "submitted" && (
             <button onClick={handleFinalize} disabled={actionLoading} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--process-blue)", color: "var(--deep-ink)" }}>{actionLoading ? "Finalizing…" : "Finalize Case"}</button>
           )}
           {error && <p className="text-xs" style={{ color: "var(--harm-clay)" }}>{error}</p>}

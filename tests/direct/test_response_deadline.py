@@ -33,3 +33,15 @@ def test_lock_allowed_after_canonical_response_deadline(direct_vm, direct_deploy
     direct_vm.warp((datetime.fromisoformat(deadline.replace("Z", "+00:00")) + timedelta(seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
     protocol.lock_evidence(case)
     assert json.loads(protocol.get_case(case))["status"] == "evidence_locked"
+
+
+def test_respondent_reply_at_deadline_is_rejected(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol = direct_deploy("contract/redress.py")
+    direct_vm.sender = direct_owner
+    venue = protocol.create_venue("Venue", "scope", "https://policy.example/policy", 100, 3600, True, True)
+    case = protocol.file_complaint(venue, _hex(direct_bob), "Issue", "service_failure", "fixed_compensation", 5, "Not delivered", "[]", "2026-01-01")
+    deadline = json.loads(protocol.get_case(case))["response_deadline"]
+    direct_vm.warp(deadline)
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Response deadline has expired"):
+        protocol.respond_to_complaint(case, "Late reply", "[]", "none", 0)
