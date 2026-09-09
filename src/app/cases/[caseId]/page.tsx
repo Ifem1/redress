@@ -131,6 +131,8 @@ export default function CaseDetailPage() {
         canRequestReview={canRequestReview}
         reviewing={reviewing}
         hasVerdict={!!verdict}
+        challengeExpired={challengeExpired}
+        responseExpired={responseExpired}
       />
 
       <div className="civic-panel p-4 overflow-x-auto">
@@ -230,7 +232,7 @@ export default function CaseDetailPage() {
 }
 
 function NextStepBanner({
-  caseData, isClaimant, isRespondent, canLock, canRequestReview, reviewing, hasVerdict,
+  caseData, isClaimant, isRespondent, canLock, canRequestReview, reviewing, hasVerdict, challengeExpired, responseExpired,
 }: {
   caseData: ComplaintCase;
   isClaimant: boolean;
@@ -239,6 +241,8 @@ function NextStepBanner({
   canRequestReview: boolean;
   reviewing: boolean;
   hasVerdict: boolean;
+  challengeExpired: boolean;
+  responseExpired: boolean;
 }) {
   const { caseId } = useParams<{ caseId: string }>();
   const isParty = isClaimant || isRespondent;
@@ -246,22 +250,30 @@ function NextStepBanner({
 
   let content: { text: string; cta?: { label: string; href: string } } | null = null;
 
-  if (isRespondent && caseData.status === "awaiting_response") {
+  if (isRespondent && caseData.status === "awaiting_response" && !responseExpired) {
     content = { text: "This complaint is waiting on your response.", cta: { label: "Answer the complaint", href: `/cases/${caseId}/respond` } };
+  } else if (caseData.status === "awaiting_response" && responseExpired) {
+    content = { text: "The response window has expired. Lock the evidence to continue." };
   } else if (canLock) {
     content = { text: "Both sides have had their say. Lock the evidence to move this case toward review.", cta: undefined };
   } else if (canRequestReview) {
     content = { text: "Evidence is locked. Request the GenLayer review to get a remedy verdict.", cta: { label: "Request GenLayer Review", href: `/cases/${caseId}/review` } };
   } else if (reviewing) {
     content = { text: "GenLayer validators are deliberating. This page will update automatically.", cta: undefined };
-  } else if (hasVerdict && (caseData.status === "settlement_pending" || caseData.status === "symbolic_completion_pending")) {
+  } else if (hasVerdict && (caseData.status === "settlement_pending" || caseData.status === "symbolic_completion_pending") && !challengeExpired) {
     content = {
       text: caseData.status === "settlement_pending"
-        ? "A verdict was reached. Settlement is ready to be executed."
+        ? "A monetary remedy was approved. The Redress challenge window is still open."
         : isRespondent
-          ? "A verdict was reached. Record proof that the symbolic remedy was completed."
-          : "A verdict was reached. Waiting on the respondent to complete the symbolic remedy.",
+          ? "A symbolic remedy was ordered. It can be completed after Redress finalization."
+          : "A symbolic remedy was ordered and can be completed after finalization.",
     };
+  } else if (hasVerdict && caseData.challenge_status === "completed" && !challengeExpired) {
+    content = { text: "The challenge has been reviewed. The reviewed decision is operative, but the finalization window is still open." };
+  } else if (hasVerdict && challengeExpired && caseData.status !== "finalized" && caseData.status !== "closed") {
+    content = { text: "The Redress challenge window has closed. Finalize this case to continue." };
+  } else if (caseData.status === "finalized" && hasVerdict) {
+    content = { text: "Case finalized. Continue with the contract-valid remedy action below." };
   } else if (caseData.status === "closed") {
     content = { text: "This case is closed." };
   } else if (caseData.status === "dismissed") {

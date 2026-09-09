@@ -212,3 +212,48 @@ def test_dismissed_case_cannot_record_symbolic_completion(direct_vm, direct_depl
     direct_vm.sender = direct_bob
     with direct_vm.expect_revert("Final verdict does not require symbolic completion"):
         protocol.record_symbolic_completion(case, "No completion", "https://example.com/proof")
+
+
+def test_full_challenge_to_finalization_to_monetary_completion(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "claim_upheld_full", "remedy_type": "full_refund", "compensation_bps": 10000, "severity": "high", "responsibility": "respondent", "confidence": 90, "short_reason": "supported"})
+    original = json.loads(protocol.request_redress_review(case))
+    assert json.loads(protocol.get_pool_stats(venue))["pool_reserved"] == 10
+    direct_vm.clear_mocks(); _mock_case(direct_vm, {"verdict": "claim_upheld_partial", "remedy_type": "partial_refund", "compensation_bps": 6000, "severity": "medium", "responsibility": "respondent", "confidence": 90, "short_reason": "modified"})
+    protocol.challenge_case(case, "Material new evidence changes the compensation", '["https://challenge.example/evidence"]')
+    assert json.loads(protocol.get_case_verdict(case))["approved_amount"] == 6
+    with direct_vm.expect_revert("Challenge already used or closed"):
+        protocol.challenge_case(case, "Second challenge must fail permanently", '["https://challenge.example/evidence"]')
+    with direct_vm.expect_revert("Challenge window is still open"):
+        protocol.finalize_case(case)
+    deadline = json.loads(protocol.get_case(case))["challenge_deadline"]
+    direct_vm.warp((datetime.fromisoformat(deadline.replace("Z", "+00:00")) + timedelta(seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+    direct_vm.sender = direct_owner; protocol.finalize_case(case); direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("Final verdict does not require symbolic completion"):
+        protocol.record_symbolic_completion(case, "Wrong path", "https://example.com/proof")
+    protocol.settle_case(case)
+    state = json.loads(protocol.get_case(case)); stats = json.loads(protocol.get_pool_stats(venue))
+    assert state["status"] == "closed" and state["payout_status"] == "scheduled"
+    assert stats["pool_reserved"] == 0 and stats["pool_paid"] == 6
+    assert_pool_invariant(stats)
+    with direct_vm.expect_revert("Case is not pending settlement"):
+        protocol.settle_case(case)
+
+
+def test_full_challenge_to_finalization_to_symbolic_completion(direct_vm, direct_deploy, direct_owner, direct_bob):
+    protocol, venue, case = _setup(direct_vm, direct_deploy, direct_owner, direct_bob)
+    _mock_case(direct_vm, {"verdict": "symbolic_redress_only", "remedy_type": "apology_public", "compensation_bps": 0, "severity": "medium", "responsibility": "respondent", "confidence": 90, "short_reason": "apology"})
+    protocol.request_redress_review(case); direct_vm.clear_mocks(); _mock_case(direct_vm, {"verdict": "symbolic_redress_only", "remedy_type": "correction_required", "compensation_bps": 0, "severity": "medium", "responsibility": "respondent", "confidence": 90, "short_reason": "correction"})
+    protocol.challenge_case(case, "Material new evidence changes symbolic remedy", '["https://challenge.example/evidence"]')
+    with direct_vm.expect_revert("Case must be finalized before symbolic completion"):
+        direct_vm.sender = direct_bob; protocol.record_symbolic_completion(case, "Early", "https://example.com/proof")
+    with direct_vm.expect_revert("Challenge window is still open"):
+        direct_vm.sender = direct_owner; protocol.finalize_case(case)
+    deadline = json.loads(protocol.get_case(case))["challenge_deadline"]
+    direct_vm.warp((datetime.fromisoformat(deadline.replace("Z", "+00:00")) + timedelta(seconds=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+    protocol.finalize_case(case); direct_vm.sender = direct_bob; protocol.record_symbolic_completion(case, "Correction published", "https://example.com/proof")
+    assert json.loads(protocol.get_case(case))["status"] == "closed"
+    with direct_vm.expect_revert("Case must be finalized before symbolic completion"):
+        protocol.record_symbolic_completion(case, "Duplicate", "https://example.com/proof")
+    with direct_vm.expect_revert("Case is not pending settlement"):
+        protocol.settle_case(case)
