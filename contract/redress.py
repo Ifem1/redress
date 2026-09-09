@@ -6,7 +6,7 @@ from genlayer import *
 import json
 import hashlib
 import typing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 def _now() -> str:
@@ -646,7 +646,7 @@ class RedressProtocol(gl.Contract):
             "incident_date_text": self._limit(incident_date_text, 120),
             "status": "awaiting_response",
             "created_at": now,
-            "response_deadline": response_window,
+            "response_deadline": (datetime.fromisoformat(now.replace("Z", "+00:00")) + timedelta(seconds=response_window)).isoformat().replace("+00:00", "Z"),
             "evidence_locked": False,
             "latest_verdict_id": "",
         }
@@ -729,8 +729,16 @@ class RedressProtocol(gl.Contract):
 
         if case.get("evidence_locked", False):
             raise gl.vm.UserError("Evidence already locked")
-        if case.get("status", "") not in ("awaiting_response", "response_submitted"):
+        status = case.get("status", "")
+        if status not in ("awaiting_response", "response_submitted"):
             raise gl.vm.UserError("Case is not in a lockable state")
+        if status == "awaiting_response":
+            try:
+                expired = _canonical_datetime() >= datetime.fromisoformat(case.get("response_deadline", "").replace("Z", "+00:00"))
+            except Exception:
+                raise gl.vm.UserError("Response deadline is invalid")
+            if not expired:
+                raise gl.vm.UserError("Respondent response or canonical deadline expiry required")
 
         case["evidence_locked"] = True
         old_status = case.get("status", "")

@@ -55,7 +55,7 @@ export interface ComplaintCase {
   incident_date_text: string;
   status: CaseStatus;
   created_at: string;
-  response_deadline: number;
+  response_deadline: string;
   evidence_locked: boolean;
   latest_verdict_id: string;
   locked_at?: string;

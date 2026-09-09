@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getCase, getCaseReply, getCaseVerdict, getConnectedAddress, lockEvidence } from "@/lib/contract";
+import { challengeCase, finalizeCase, getCase, getCaseReply, getCaseVerdict, getConnectedAddress, lockEvidence } from "@/lib/contract";
 import { CaseStatusBadge } from "@/components/CaseStatusBadge";
 import { RemedyTrack } from "@/components/RemedyTrack";
 import { EvidenceLinkList } from "@/components/EvidenceLinkList";
@@ -32,6 +32,9 @@ export default function CaseDetailPage() {
   const [locking, setLocking] = useState(false);
   const [lockTx, setLockTx] = useState<{ txHash: string; explorerLink: string } | null>(null);
   const [error, setError] = useState("");
+  const [challengeReason, setChallengeReason] = useState("");
+  const [challengeUrls, setChallengeUrls] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
   const statusRef = useRef<string | undefined>(undefined);
 
   async function refresh(showSpinner: boolean) {
@@ -79,6 +82,20 @@ export default function CaseDetailPage() {
     } finally {
       setLocking(false);
     }
+  }
+
+  async function handleChallenge() {
+    setActionLoading(true); setError("");
+    try { await challengeCase(caseId, challengeReason, JSON.stringify(challengeUrls.split("\n").map((u) => u.trim()).filter(Boolean))); setChallengeReason(""); setChallengeUrls(""); await refresh(false); }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : "Could not submit challenge"); }
+    finally { setActionLoading(false); }
+  }
+
+  async function handleFinalize() {
+    setActionLoading(true); setError("");
+    try { await finalizeCase(caseId); await refresh(false); }
+    catch (err: unknown) { setError(err instanceof Error ? err.message : "Could not finalize case"); }
+    finally { setActionLoading(false); }
   }
 
   if (loading) return <div className="max-w-5xl mx-auto px-4 py-10 text-sm text-[var(--soft-grey)]">Loading case…</div>;
@@ -184,6 +201,19 @@ export default function CaseDetailPage() {
           )}
 
           {verdict && <SettlementPanel caseData={caseData} verdict={verdict} isRespondent={isRespondent} onSettled={() => refresh(false)} />}
+          {verdict && (isClaimant || isRespondent) && caseData.challenge_status === "open" &&
+            ["settlement_pending", "symbolic_completion_pending", "verdict_issued", "dismissed"].includes(caseData.status) && (
+            <div className="civic-panel p-5 flex flex-col gap-3">
+              <p className="text-xs mono text-[var(--soft-grey)]">Application challenge window</p>
+              <textarea value={challengeReason} onChange={(e) => setChallengeReason(e.target.value)} placeholder="Material reason (at least 20 characters)" className="case-sheet px-3 py-2 text-sm rounded resize-none h-20" />
+              <textarea value={challengeUrls} onChange={(e) => setChallengeUrls(e.target.value)} placeholder="New public evidence URL(s), one per line" className="case-sheet px-3 py-2 text-sm rounded resize-none h-16" />
+              <button onClick={handleChallenge} disabled={actionLoading || challengeReason.trim().length < 20 || !challengeUrls.trim()} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--redress-amber)", color: "var(--deep-ink)" }}>{actionLoading ? "Submitting…" : "Submit Challenge"}</button>
+            </div>
+          )}
+          {verdict && caseData.challenge_status === "completed" && caseData.status !== "finalized" && (
+            <button onClick={handleFinalize} disabled={actionLoading} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--process-blue)", color: "var(--deep-ink)" }}>{actionLoading ? "Finalizing…" : "Finalize Case"}</button>
+          )}
+          {error && <p className="text-xs" style={{ color: "var(--harm-clay)" }}>{error}</p>}
         </div>
       </div>
     </div>
