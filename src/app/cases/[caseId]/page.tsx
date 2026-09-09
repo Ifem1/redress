@@ -107,6 +107,8 @@ export default function CaseDetailPage() {
   const isClaimant = address?.toLowerCase() === caseData.claimant.toLowerCase();
   const isRespondent = address?.toLowerCase() === caseData.respondent.toLowerCase();
   const responseExpired = nowMs > 0 && !!caseData.response_deadline && Date.parse(caseData.response_deadline) <= nowMs;
+  const challengeExpired = nowMs > 0 && !!caseData.challenge_deadline && Date.parse(caseData.challenge_deadline) <= nowMs;
+  const finalizable = ["settlement_pending", "symbolic_completion_pending", "verdict_issued", "dismissed"].includes(caseData.status) && caseData.challenge_status !== "submitted" && challengeExpired;
   const canLock = (isClaimant || isRespondent) && !caseData.evidence_locked && caseData.status !== "closed" && caseData.status !== "dismissed" && (caseData.status === "response_submitted" || responseExpired);
   const canRequestReview = caseData.status === "evidence_locked";
   const reviewing = caseData.status === "under_genlayer_review";
@@ -144,6 +146,7 @@ export default function CaseDetailPage() {
           </div>
           <p className="text-xs text-[var(--soft-grey)]">{HARM_CATEGORY_LABELS[caseData.harm_category]} · {caseData.incident_date_text}</p>
           <p className="text-xs mono">Response deadline: {new Date(caseData.response_deadline).toLocaleString()} · {responseExpired ? "expired" : "open"}</p>
+          {caseData.challenge_deadline && <p className="text-xs mono">Challenge window closes: {new Date(caseData.challenge_deadline).toLocaleString()} · {challengeExpired ? "closed" : "open"}</p>}
           <p className="text-sm whitespace-pre-wrap">{caseData.complaint_text}</p>
           <div className="pt-2 border-t border-[var(--line-ash)]/40 text-xs">
             <p className="text-[var(--soft-grey)]">Requested remedy</p>
@@ -158,11 +161,12 @@ export default function CaseDetailPage() {
 
         <div className="md:col-span-1">
           <ResponsePanel reply={reply} />
-          {isRespondent && caseData.status === "awaiting_response" && (
+          {isRespondent && caseData.status === "awaiting_response" && !responseExpired && (
             <Link href={`/cases/${caseId}/respond`} className="amber-glow mt-3 block text-center px-4 py-2 rounded text-sm mono" style={{ background: "var(--process-blue)", color: "var(--deep-ink)" }}>
               Answer the complaint
             </Link>
           )}
+          {isRespondent && caseData.status === "awaiting_response" && responseExpired && <p className="text-xs text-[var(--soft-grey)] italic">Response window expired.</p>}
         </div>
 
         <div className="md:col-span-1 flex flex-col gap-4">
@@ -206,7 +210,7 @@ export default function CaseDetailPage() {
           )}
 
           {verdict && <SettlementPanel caseData={caseData} verdict={verdict} isRespondent={isRespondent} onSettled={() => refresh(false)} />}
-          {verdict && (isClaimant || isRespondent) && caseData.challenge_status === "open" &&
+          {verdict && (isClaimant || isRespondent) && caseData.challenge_status === "open" && !challengeExpired &&
             ["settlement_pending", "symbolic_completion_pending", "verdict_issued", "dismissed"].includes(caseData.status) && (
             <div className="civic-panel p-5 flex flex-col gap-3">
               <p className="text-xs mono text-[var(--soft-grey)]">Application challenge window</p>
@@ -215,7 +219,7 @@ export default function CaseDetailPage() {
               <button onClick={handleChallenge} disabled={actionLoading || challengeReason.trim().length < 20 || !challengeUrls.trim()} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--redress-amber)", color: "var(--deep-ink)" }}>{actionLoading ? "Submitting…" : "Submit Challenge"}</button>
             </div>
           )}
-          {verdict && caseData.status !== "finalized" && caseData.status !== "closed" && caseData.challenge_status !== "submitted" && (
+          {verdict && finalizable && (
             <button onClick={handleFinalize} disabled={actionLoading} className="px-4 py-2 rounded text-sm mono" style={{ background: "var(--process-blue)", color: "var(--deep-ink)" }}>{actionLoading ? "Finalizing…" : "Finalize Case"}</button>
           )}
           {error && <p className="text-xs" style={{ color: "var(--harm-clay)" }}>{error}</p>}

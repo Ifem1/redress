@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { weiToGen } from "@/lib/constants";
+import { weiToGen, SYMBOLIC_REMEDIES } from "@/lib/constants";
 import { settleCase, recordSymbolicCompletion } from "@/lib/contract";
 import { TxPanel } from "./ExplorerLink";
 import type { ComplaintCase, RedressVerdict } from "@/lib/types";
@@ -24,7 +24,7 @@ export function SettlementPanel({
   const [error, setError] = useState("");
 
   const isMonetary = caseData.status === "finalized" && verdict.approved_amount > 0;
-  const isSymbolic = caseData.status === "finalized" && verdict.approved_amount === 0 && verdict.remedy_type !== "full_refund" && verdict.remedy_type !== "partial_refund" && verdict.remedy_type !== "fixed_compensation";
+  const isSymbolic = caseData.status === "finalized" && verdict.verdict === "symbolic_redress_only" && verdict.approved_amount === 0 && SYMBOLIC_REMEDIES.includes(verdict.remedy_type);
 
   async function handleSettle() {
     setLoading(true);

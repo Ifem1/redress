@@ -61,6 +61,10 @@ export const REMEDY_BAR_ORDER: RemedyType[] = [
   "apology_public", "apology_private", "correction_required", "no_remedy",
 ];
 
+export const SYMBOLIC_REMEDIES: RemedyType[] = [
+  "apology_public", "apology_private", "correction_required", "acknowledgement_only",
+];
+
 export const PROPORTIONALITY_ORDER = [
   "dismissal", "acknowledgement", "apology", "partial_refund", "full_compensation", "escalation",
 ] as const;
