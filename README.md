@@ -90,7 +90,7 @@ Deploy `contract/redress.py` to GenLayer StudioNet via the GenLayer CLI or Studi
 
 ## Wallet & network
 
-The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The verified deployment for source commit `76d54f9fa1ddbfb55ffe64e9edbd8e177d90ecf6` is `0x89C942494D5543d9c5aB5903cABb9fF35a413191`; deployment transaction `0xa791ebf0ae013135b1136b51b920d5c27e123fa427c2b43319509a8a64bf16e2` finalized with successful execution and majority agreement.
+The frontend connects to an injected wallet (e.g. MetaMask) and prompts to add/switch to GenLayer StudioNet (chain id `61999` / `0xF22F`) using standard `wallet_switchEthereumChain` / `wallet_addEthereumChain` calls — no browser extension beyond a standard EVM wallet is required. The current verified deployment for source commit `3e07fc0` is `0xd7BbbbC1c7DcbD44382a53472445833734533727`; deployment transaction `0x2dc0d22dac6d959a8450814a45c555d100f0a43097894aa19874771e45f4548a` reached `ACCEPTED` with successful execution and majority agreement.
 
 Wallet connection is explicit and session-scoped: first-time visitors see "Connect Wallet" and must click it; once connected, the session stays connected until the tab is closed or you click disconnect.
 
@@ -111,6 +111,8 @@ The accounting fields have precise meanings: `pool_total_funded` is cumulative G
 The application-level Redress challenge window is distinct from GenLayer's protocol-level transaction appeal/finality lifecycle. The former is enforced from the canonical transaction datetime supplied to the Intelligent Contract; the latter is handled by GenLayer transaction status/finality. The Direct Mode suite covers payable funding and the complete economic lifecycle, and live payable funding has been verified through GenLayerJS.
 
 The final deployment also has a live payable funding proof using GenLayerJS `writeContract(..., value)`: transaction `0x814c94fb750edd229130cf23bce551aa5d13ab5c299993756db709f5843e43e5` sent `1 GEN` to `fund_venue_pool("VENUE-1")`. The canonical pool state afterward was `pool_total_funded=1 GEN`, `pool_balance=1 GEN`, `pool_reserved=0`, and `pool_paid=0`; the receipt finalized with majority agreement and successful validator execution.
+
+The current deployment at `0xd7BbbbC1c7DcbD44382a53472445833734533727` was also funded live through GenLayerJS by transaction `0x36c24a55ed9a9b4b357aa726e485617ac73b2d8716603fd0380d1c363d121a21` with `0.001 GEN` to `fund_venue_pool("VENUE-1")`. The receipt had `value_credited=true`, `status_name=ACCEPTED`, `result_name=MAJORITY_AGREE`, and successful leader/validator execution; canonical pool state was `pool_total_funded=1000000000000000 wei`, `pool_balance=1000000000000000 wei`, `pool_reserved=0`, and `pool_paid=0`.
 
 A second funded live case used `VENUE-2`: funding transaction `0x16bea04d2365e2d013c49af6bad949f6710308f993cb0bf5111891a37667ec83` finalized with `1 GEN` available, complaint transaction `0x8369ad6d56f6f3dfb23dc06057335c1c8db2779330e4e32e294e0986b17e6963`, and review transaction `0x15bad70907e2db1ecd26e27485ab427457b4650905f1fcefe1ba51fdcab3f174` reached accepted majority consensus. The real public evidence was insufficient, producing `dismissed_insufficient_evidence` with `approved_amount=0`; canonical accounting remained `pool_balance=1 GEN`, `pool_reserved=0`, `pool_paid=0`.
 
